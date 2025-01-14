@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"net/http"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -33,16 +35,61 @@ func createBook(c *gin.Context) {
 	c.IndentedJSON(http.StatusCreated, newBook) //IndentedJSON căn lề và xuống dòng, không thì dùng JSON
 }
 
-func getBookById(c *gin.Context) {
-	id := c.Param("id")
+func getBookById(c *gin.Context) { 
+	id := c.Param("id") //nhận param như tham số truyền vào 
+	
+	book, err := findBook(id)
+	if err != nil{
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found book with id: " + id}) // dùng gin.H là 1 map[string]any để hiển thị lỗi, + để nối chuỗi
+		return
+	}
+	c.JSON(http.StatusOK, book)
+}
 
+func findBook(id string) (*book, error){ //phải trả về *, là chính đối tượng mình tìm chứ ko phải 1 bản sao, để thao tác trên đối tượng tìm được
 	for i, b := range books{
 		if id == b.ID{
-			c.IndentedJSON(http.StatusOK, books[i]) 
-			return
+			return &books[i], nil
 		}
 	}
-	c.JSON(http.StatusNotFound, gin.H{"error": "Not found book with id: " + id}) // dùng gin.H là 1 map[string]any để hiển thị lỗi, + để nối chuỗi
+	return nil, errors.New("Not found book")
+}
+
+func checkOutBook(c *gin.Context) { //mượn sách
+	id, ok := c.GetQuery("id")
+
+	if !ok{
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"message":"Missing id query parameter"})
+		return
+	}
+
+	book, err := findBook(id)
+	if err != nil{
+		c.IndentedJSON(http.StatusNotFound, gin.H{"error": "Not found book with id: " + id})
+		return
+	}else if book.Quantity < 1{
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"error": "Book not available"})
+		return
+	}
+	book.Quantity -= 1
+	c.IndentedJSON(http.StatusOK, book)
+}
+
+func returnBook (c *gin.Context) { //trả sách
+	id, ok := c.GetQuery("id")
+
+	if !ok{
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"message":"Missing id query parameter"})
+		return
+	}
+
+	book, err := findBook(id)
+	if err != nil{
+		c.IndentedJSON(http.StatusNotFound, gin.H{"error": "Not found book with id: " + id})
+		return
+	}
+	book.Quantity += 1
+	c.IndentedJSON(http.StatusOK, book)
 }
 
 func main() {
@@ -50,5 +97,7 @@ func main() {
 	router.GET("/book/getAll",getBooks)
 	router.POST("/book/createBook", createBook)
 	router.GET("book/getById/:id", getBookById)
+	router.PATCH("book/checkout", checkOutBook)
+	router.PATCH("book/return", returnBook)
 	router.Run("localhost:8080")
 }
